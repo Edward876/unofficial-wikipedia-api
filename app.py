@@ -38,7 +38,7 @@ def wiki_link(query):
     result_string = raw_link.replace(string_to_remove, "").split("&sa")
     return replace_encoded_text(result_string[0])
 
-@app.route("/api/wiki", methods=["GET"])
+@app.route("/api/wiki/", methods=["GET"])
 def get_wiki():
     query = request.args.get('q', '')
     if query:
