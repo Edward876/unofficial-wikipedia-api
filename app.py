@@ -1,40 +1,53 @@
 import requests
 from bs4 import BeautifulSoup
+from flask import Flask,request,jsonify
+import urllib.parse  # Import urllib.parse for unquoting URL-encoded strings
+app = Flask(__name__)
+url_encoding_dict = {
+    '%27': "'",  # Single quote
+    '%20': ' ',  # Space
+    '%21': '!',  # Exclamation mark
+    '%23': '#',  # Hash/Pound
+    '%24': '$',  # Dollar sign
+}
 
-async def pinterest(query):
-    url = f'https://id.pinterest.com/search/pins/?autologin=true&q={query}'
-    headers = {
-        "cookie": "_auth=1; _b=\"AVna7S1p7l1C5I9u0+nR3YzijpvXOPc6d09SyCzO+DcwpersQH36SmGiYfymBKhZcGg=\"; _pinterest_sess=TWc9PSZHamJOZ0JobUFiSEpSN3Z4a2NsMk9wZ3gxL1NSc2k2NkFLaUw5bVY5cXR5alZHR0gxY2h2MVZDZlNQalNpUUJFRVR5L3NlYy9JZkthekp3bHo5bXFuaFZzVHJFMnkrR3lTbm56U3YvQXBBTW96VUgzVUhuK1Z4VURGKzczUi9hNHdDeTJ5Y2pBTmxhc2owZ2hkSGlDemtUSnYvVXh5dDNkaDN3TjZCTk8ycTdHRHVsOFg2b2NQWCtpOWxqeDNjNkk3cS85MkhhSklSb0hwTnZvZVFyZmJEUllwbG9UVnpCYVNTRzZxOXNJcmduOVc4aURtM3NtRFo3STlmWjJvSjlWTU5ITzg0VUg1NGhOTEZzME9SNFNhVWJRWjRJK3pGMFA4Q3UvcHBnWHdaYXZpa2FUNkx6Z3RNQjEzTFJEOHZoaHRvazc1c1UrYlRuUmdKcDg3ZEY4cjNtZlBLRTRBZjNYK0lPTXZJTzQ5dU8ybDdVS015bWJKT0tjTWYyRlBzclpiamdsNmtpeUZnRjlwVGJXUmdOMXdTUkFHRWloVjBMR0JlTE5YcmhxVHdoNzFHbDZ0YmFHZ1VLQXU1QnpkM1FqUTNMTnhYb3VKeDVGbnhNSkdkNXFSMXQybjRGL3pyZXRLR0ZTc0xHZ0JvbTJCNnAzQzE0cW1WTndIK0trY05HV1gxS09NRktadnFCSDR2YzBoWmRiUGZiWXFQNjcwWmZhaDZQRm1UbzNxc21pV1p5WDlabm1UWGQzanc1SGlrZXB1bDVDWXQvUis3elN2SVFDbm1DSVE5Z0d4YW1sa2hsSkZJb1h0MTFpck5BdDR0d0lZOW1Pa2RDVzNySWpXWmUwOUFhQmFSVUpaOFQ3WlhOQldNMkExeDIvMjZHeXdnNjdMYWdiQUhUSEFBUlhUVTdBMThRRmh1ekJMYWZ2YTJkNlg0cmFCdnU2WEpwcXlPOVZYcGNhNkZDd051S3lGZmo0eHV0ZE42NW8xRm5aRWpoQnNKNnNlSGFad1MzOHNkdWtER0xQTFN5Z3lmRERsZnZWWE5CZEJneVRlMDd2VmNPMjloK0g5eCswZUVJTS9CRkFweHc5RUh6K1JocGN6clc1JmZtL3JhRE1sc0NMTFlpMVErRGtPcllvTGdldz0=",
-        "_ir": "0",
-    }
+def decode_url(encoded_text):
+    # Use urllib.parse.unquote to decode the entire URL
+    decoded_text = urllib.parse.unquote(encoded_text)
+    return decoded_text
 
-    try:
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()  # Raise an exception for non-200 status codes
+def replace_encoded_text(input_string):
+    decoded_string = decode_url(input_string)
+    return decoded_string
 
-        soup = BeautifulSoup(response.text, "html.parser")
-        images = soup.find_all("div", class_="pinImageWrapper")  # Find all the main image containers
+def wiki(url):
+    response = requests.get(url)
+    soup = BeautifulSoup(response.text, "html.parser")
+    paragraphs = soup.find_all("p")
+    res = ""
+    for paragraph in paragraphs:
+        res += paragraph.get_text()
+    return res
+def wiki_link(query):
+    google_wiki = f"https://www.google.com/search?q=wikipedia+{query}"
+    response = requests.get(google_wiki)
+    soup = BeautifulSoup(response.text, "html.parser")
+    wikipedia_links = [a['href'] for a in soup.find_all('a', href=True) if 'https' in a['href'] and 'wikipedia' in a['href']]
+    raw_link = wikipedia_links[1]
+    string_to_remove = "/url?q="
+    result_string = raw_link.replace(string_to_remove, "").split("&sa")
+    return replace_encoded_text(result_string[0])
 
-        results = []
-        for image in images:
-            link = image.find("img")["src"]  # Extract the image source
-            results.append(link)
-
-        return results
-
-    except requests.exceptions.RequestException as e:
-        print(f"Error: {e}")
-        return None
-
-# Example usage:
-async def main():
-    query_result = await pinterest("jojo")
-    if query_result:
-        print(query_result)
+@app.route("/api/wiki", methods=["GET"])
+def get_wiki():
+    query = request.args.get('q', '')
+    if query:
+        result = {"query": query, "result": wiki(wiki_link(query))}
+        return jsonify(result)
     else:
-        print("Failed to fetch Pinterest images.")
+     return jsonify({'error': 'No query parameter provided.'})
+
 
 if __name__ == "__main__":
-    import asyncio
-
-    asyncio.run(main())
+    app.run(host='0.0.0.0', port=5001, debug=True)
+    
